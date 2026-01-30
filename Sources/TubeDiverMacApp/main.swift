@@ -2,6 +2,26 @@ import Cocoa
 import SpriteKit
 import TubeDiverCore
 
+final class GameView: SKView {
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        scene?.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        scene?.mouseDragged(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        scene?.keyDown(with: event)
+    }
+
+    override func keyUp(with event: NSEvent) {
+        scene?.keyUp(with: event)
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
 
@@ -22,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.contentAspectRatio = gameplaySize
 
-        let skView = SKView(frame: NSRect(origin: .zero, size: size))
+        let skView = GameView(frame: NSRect(origin: .zero, size: size))
         skView.ignoresSiblingOrder = true
         skView.preferredFramesPerSecond = 60
         skView.showsFPS = true
@@ -38,6 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         app.activate(ignoringOtherApps: true)
         self.window = window
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 }
 

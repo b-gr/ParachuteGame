@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:TubeDiver}",
+            "name": "Debug TubeDiverMacApp",
+            "target": "TubeDiverMacApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug TubeDiverMacApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:TubeDiver}",
+            "name": "Release TubeDiverMacApp",
+            "target": "TubeDiverMacApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release TubeDiverMacApp"
+        }
+    ]
+}
