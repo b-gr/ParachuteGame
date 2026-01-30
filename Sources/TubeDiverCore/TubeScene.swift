@@ -171,6 +171,7 @@ public final class TubeScene: SKScene {
         player.physicsBody?.allowsRotation = false
         player.physicsBody?.linearDamping = 12
         player.physicsBody?.restitution = 0
+        player.physicsBody?.usesPreciseCollisionDetection = true
 
         player.physicsBody?.categoryBitMask = Category.player
         player.physicsBody?.collisionBitMask = Category.obstacle
@@ -755,6 +756,7 @@ public final class TubeScene: SKScene {
         bird.physicsBody = SKPhysicsBody(rectangleOf: CGSize(width: hitW, height: hitH))
         bird.physicsBody?.affectedByGravity = false
         bird.physicsBody?.allowsRotation = false
+        bird.physicsBody?.usesPreciseCollisionDetection = true
         bird.physicsBody?.categoryBitMask = Category.obstacle
         bird.physicsBody?.collisionBitMask = Category.player
         bird.physicsBody?.contactTestBitMask = Category.player
@@ -1166,13 +1168,14 @@ public final class TubeScene: SKScene {
 
     private func updateHUD() {
         let seconds = Int(elapsed)
+        let score = seconds * (1 + coinsThisRun)
         var buffs: [String] = []
         if shieldRemaining > 0 { buffs.append("Shield") }
         if boostRemaining > 0 { buffs.append("Boost") }
         if slowRemaining > 0 { buffs.append("Slow") }
         let buffText = buffs.isEmpty ? "" : "  [" + buffs.joined(separator: ", ") + "]"
 
-        scoreLabel.text = "Time: \(seconds)s  Coins: \(coinsThisRun)" + buffText
+        scoreLabel.text = "Score: \(score)  Time: \(seconds)s  Coins: \(coinsThisRun)" + buffText
     }
 
     private func cleanupWorld() {
@@ -1299,6 +1302,8 @@ public final class TubeScene: SKScene {
 
         player.physicsBody?.velocity = .zero
         player.physicsBody?.isDynamic = false
+        bird.physicsBody?.velocity = .zero
+        bird.physicsBody?.isDynamic = false
 
         let hitW = (bird.userData?["hitW"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 70
         let dx = abs(contact.contactPoint.x - bird.position.x)
@@ -1318,7 +1323,7 @@ public final class TubeScene: SKScene {
         let zoom = SKAction.group([move, scale])
         let knock = SKAction.run { [weak self] in
             guard let self else { return }
-            self.showDizzyRing(at: CGPoint(x: self.player.position.x, y: self.player.position.y + 36))
+            self.showImpactRing(at: contact.contactPoint)
         }
 
         let impact = SKAction.run { [weak self] in
@@ -1328,6 +1333,19 @@ public final class TubeScene: SKScene {
                 .moveBy(x: 0, y: -90, duration: 0.6)
             ])
             self.player.run(hit)
+
+            let fallOut = SKAction.sequence([
+                .wait(forDuration: 0.2),
+                .moveTo(y: self.frame.minY - 220, duration: 0.55),
+                .removeFromParent()
+            ])
+            self.player.run(fallOut)
+
+            let birdOut = SKAction.sequence([
+                .moveTo(y: self.frame.maxY + 220, duration: 0.45),
+                .removeFromParent()
+            ])
+            bird.run(birdOut)
         }
 
         let fade = SKAction.sequence([
@@ -1362,28 +1380,31 @@ public final class TubeScene: SKScene {
         presentNameEntry()
     }
 
-    private func showDizzyRing(at position: CGPoint) {
-        let ring = SKShapeNode(circleOfRadius: 18)
-        ring.strokeColor = SKColor(white: 0.98, alpha: 1)
+    private func showImpactRing(at position: CGPoint) {
+        let ring = SKShapeNode(circleOfRadius: 20)
+        ring.strokeColor = SKColor(red: 0.95, green: 0.20, blue: 0.18, alpha: 0.95)
         ring.lineWidth = 4
         ring.fillColor = .clear
         ring.position = position
         ring.zPosition = player.zPosition + 3
         addChild(ring)
 
-        let spin = SKAction.repeatForever(.rotate(byAngle: 0.6, duration: 0.16))
+        let flash = SKAction.sequence([
+            .fadeAlpha(to: 0.2, duration: 0.12),
+            .fadeAlpha(to: 1.0, duration: 0.12)
+        ])
         let pulse = SKAction.sequence([
-            .scale(to: 1.15, duration: 0.25),
-            .scale(to: 1.0, duration: 0.25)
+            .scale(to: 1.18, duration: 0.2),
+            .scale(to: 1.0, duration: 0.2)
         ])
         let fade = SKAction.sequence([
-            .wait(forDuration: 1.0),
-            .fadeAlpha(to: 0.0, duration: 0.5),
+            .wait(forDuration: 0.8),
+            .fadeAlpha(to: 0.0, duration: 0.4),
             .removeFromParent()
         ])
 
-        ring.run(spin, withKey: "spin")
-        ring.run(.repeatForever(pulse), withKey: "pulse")
+        ring.run(.repeatForever(flash))
+        ring.run(.repeatForever(pulse))
         ring.run(fade)
     }
 
