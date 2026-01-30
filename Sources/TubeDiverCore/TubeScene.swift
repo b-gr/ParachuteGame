@@ -70,6 +70,7 @@ public final class TubeScene: SKScene {
 
     private let scoreLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
     private let statusLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let hudBar = SKShapeNode()
     private let scorePanel = SKShapeNode(rectOf: CGSize(width: 340, height: 420), cornerRadius: 16)
     private let deathOverlay = SKShapeNode(rectOf: CGSize(width: 390, height: 844), cornerRadius: 0)
 
@@ -471,6 +472,12 @@ public final class TubeScene: SKScene {
         statusLabel.zPosition = 51
         hud.addChild(statusLabel)
 
+        hudBar.fillColor = SKColor(white: 0.05, alpha: 0.88)
+        hudBar.strokeColor = .clear
+        hudBar.zPosition = 49
+        hudBar.isHidden = false
+        hud.addChild(hudBar)
+
         scorePanel.fillColor = SKColor(white: 0.05, alpha: 0.88)
         scorePanel.strokeColor = .clear
         scorePanel.zPosition = 50
@@ -492,6 +499,9 @@ public final class TubeScene: SKScene {
     private func layoutHUD() {
         scoreLabel.position = CGPoint(x: frame.minX + 18, y: frame.maxY - 14)
         statusLabel.position = CGPoint(x: frame.midX, y: frame.midY)
+        let barHeight = scoreLabel.fontSize + 12
+        hudBar.path = CGPath(rect: CGRect(x: frame.midX - frame.width / 2, y: frame.maxY - barHeight, width: frame.width, height: barHeight), transform: nil)
+        hudBar.position = .zero
         scorePanel.position = CGPoint(x: frame.midX, y: frame.midY)
     }
 
@@ -534,6 +544,7 @@ public final class TubeScene: SKScene {
         statusLabel.numberOfLines = 0
         statusLabel.text = "Click / Press Space to Start"
         scorePanel.isHidden = true
+        hudBar.isHidden = false
         nameBuffer = ""
         nextMilestoneSeconds = 10
 
@@ -546,6 +557,9 @@ public final class TubeScene: SKScene {
         playerArt.zRotation = 0
         player.physicsBody?.velocity = .zero
         player.physicsBody?.isDynamic = true
+        if player.parent == nil {
+            setupPlayer()
+        }
         layoutPlayer()
         updatePlayerModifierArt()
     }
@@ -1167,15 +1181,16 @@ public final class TubeScene: SKScene {
     }
 
     private func updateHUD() {
-        let seconds = Int(elapsed)
-        let score = seconds * (1 + coinsThisRun)
+        let seconds = max(0, elapsed)
+        let score = Int((seconds * Double(1 + coinsThisRun)).rounded())
+        let timeText = String(format: "%.1f", seconds)
         var buffs: [String] = []
         if shieldRemaining > 0 { buffs.append("Shield") }
         if boostRemaining > 0 { buffs.append("Boost") }
         if slowRemaining > 0 { buffs.append("Slow") }
         let buffText = buffs.isEmpty ? "" : "  [" + buffs.joined(separator: ", ") + "]"
 
-        scoreLabel.text = "Score: \(score)  Time: \(seconds)s  Coins: \(coinsThisRun)" + buffText
+        scoreLabel.text = "Score: \(score)  Time: \(timeText)s  Coins: \(coinsThisRun)" + buffText
     }
 
     private func cleanupWorld() {
