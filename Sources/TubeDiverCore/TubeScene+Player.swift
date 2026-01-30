@@ -121,19 +121,27 @@ extension TubeScene {
         belt.strokeColor = .clear
         belt.position = CGPoint(x: 0, y: -8)
 
+        let leftArmPivot = SKNode()
+        leftArmPivot.name = "leftArm"
+        leftArmPivot.position = CGPoint(x: -10, y: 2)
         let leftArm = SKShapeNode(rectOf: CGSize(width: 18, height: 6), cornerRadius: 3)
         leftArm.fillColor = suit
         leftArm.strokeColor = outline
         leftArm.lineWidth = 2
-        leftArm.zRotation = 0.22
-        leftArm.position = CGPoint(x: -14, y: 2)
+        leftArm.position = CGPoint(x: -9, y: 0)
+        leftArmPivot.zRotation = 0.22
+        leftArmPivot.addChild(leftArm)
 
+        let rightArmPivot = SKNode()
+        rightArmPivot.name = "rightArm"
+        rightArmPivot.position = CGPoint(x: 10, y: 2)
         let rightArm = SKShapeNode(rectOf: CGSize(width: 18, height: 6), cornerRadius: 3)
         rightArm.fillColor = suit
         rightArm.strokeColor = outline
         rightArm.lineWidth = 2
-        rightArm.zRotation = -0.22
-        rightArm.position = CGPoint(x: 14, y: 2)
+        rightArm.position = CGPoint(x: 9, y: 0)
+        rightArmPivot.zRotation = -0.22
+        rightArmPivot.addChild(rightArm)
 
         let leftLeg = SKShapeNode(rectOf: CGSize(width: 6, height: 20), cornerRadius: 3)
         leftLeg.fillColor = suitDark
@@ -172,8 +180,8 @@ extension TubeScene {
         playerArt.addChild(pack)
         playerArt.addChild(torso)
         torso.addChild(belt)
-        playerArt.addChild(leftArm)
-        playerArt.addChild(rightArm)
+        playerArt.addChild(leftArmPivot)
+        playerArt.addChild(rightArmPivot)
         playerArt.addChild(leftLeg)
         playerArt.addChild(rightLeg)
         playerArt.addChild(head)
@@ -355,6 +363,82 @@ extension TubeScene {
         rocketArt.isHidden = !(boostRemaining > 0)
         parachuteArt.isHidden = !((slowRemaining > 0) || (runState == .ready && startParachuteVisible))
         updateRocketFuelBar()
+        updateArmFlail()
+    }
+
+    func armBaseAngles() -> (left: CGFloat, right: CGFloat) {
+        (1.92 - .pi, 1.22)
+    }
+
+    func updateArmFlail() {
+        guard let leftArm = playerArt.childNode(withName: "leftArm"),
+              let rightArm = playerArt.childNode(withName: "rightArm") else { return }
+
+        if runState == .deathCinematic {
+            leftArm.removeAction(forKey: "flail")
+            rightArm.removeAction(forKey: "flail")
+            return
+        }
+
+        let base = armBaseAngles()
+        let baseLeft = base.left
+        let baseRight = base.right
+        let shouldFlail = runState == .playing && slowRemaining <= 0
+
+        if shouldFlail {
+            if leftArm.action(forKey: "flail") == nil {
+                let leftSeq = SKAction.sequence([
+                    .rotate(toAngle: baseLeft + 0.55, duration: 0.10),
+                    .rotate(toAngle: baseLeft - 0.45, duration: 0.16),
+                    .rotate(toAngle: baseLeft + 0.35, duration: 0.12)
+                ])
+                leftSeq.timingMode = .easeInEaseOut
+                leftArm.run(.repeatForever(leftSeq), withKey: "flail")
+            }
+            if rightArm.action(forKey: "flail") == nil {
+                let rightSeq = SKAction.sequence([
+                    .rotate(toAngle: baseRight - 0.55, duration: 0.11),
+                    .rotate(toAngle: baseRight + 0.45, duration: 0.15),
+                    .rotate(toAngle: baseRight - 0.35, duration: 0.13)
+                ])
+                rightSeq.timingMode = .easeInEaseOut
+                rightArm.run(.repeatForever(rightSeq), withKey: "flail")
+            }
+        } else {
+            leftArm.removeAction(forKey: "flail")
+            rightArm.removeAction(forKey: "flail")
+            leftArm.zRotation = baseLeft
+            rightArm.zRotation = baseRight
+        }
+    }
+
+    func stopArmFlail(slowly: Bool) {
+        guard let leftArm = playerArt.childNode(withName: "leftArm"),
+              let rightArm = playerArt.childNode(withName: "rightArm") else { return }
+
+        let base = armBaseAngles()
+        leftArm.removeAction(forKey: "flail")
+        rightArm.removeAction(forKey: "flail")
+
+        if slowly {
+            let leftSettle = SKAction.rotate(toAngle: base.left, duration: 0.6)
+            let rightSettle = SKAction.rotate(toAngle: base.right, duration: 0.6)
+            leftSettle.timingMode = .easeOut
+            rightSettle.timingMode = .easeOut
+            leftArm.run(leftSettle, withKey: "flailSettle")
+            rightArm.run(rightSettle, withKey: "flailSettle")
+        } else {
+            leftArm.zRotation = base.left
+            rightArm.zRotation = base.right
+        }
+    }
+
+    func freezeArmPose() {
+        guard let leftArm = playerArt.childNode(withName: "leftArm"),
+              let rightArm = playerArt.childNode(withName: "rightArm") else { return }
+
+        leftArm.removeAction(forKey: "flail")
+        rightArm.removeAction(forKey: "flail")
     }
 
     func ensurePlayerVisible() {

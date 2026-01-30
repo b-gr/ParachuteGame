@@ -65,6 +65,7 @@ extension TubeScene {
 
     func startDeathCinematic(contact: SKPhysicsContact, bird: SKNode) {
         runState = .deathCinematic
+        freezeArmPose()
 
         player.physicsBody?.velocity = .zero
         player.physicsBody?.isDynamic = false
@@ -81,9 +82,10 @@ extension TubeScene {
         let zoomDuration = TimeInterval(lerp(0.95, 0.6, emphasis))
         let slowMin: CGFloat = 0.05
         let ringDelay: TimeInterval = 0.08
-        let resumeDuration: TimeInterval = 0.6
-        let zoomOutDuration: TimeInterval = 0.7
-        let finishDelay: TimeInterval = 0.7
+        let holdDuration: TimeInterval = 1.0
+        let resumeDuration: TimeInterval = 0.7
+        let zoomOutDuration: TimeInterval = 0.8
+        let finishDelay: TimeInterval = 0.8
 
         world.removeAllActions()
         cameraNode.removeAllActions()
@@ -154,13 +156,15 @@ extension TubeScene {
 
         run(.sequence([
             slowMo,
+            .wait(forDuration: holdDuration),
             resumeTime
         ]), withKey: "deathSlowMo")
 
         cameraNode.run(.sequence([
             zoomIn,
             knock,
-            .wait(forDuration: 0.08),
+            .wait(forDuration: holdDuration),
+            .wait(forDuration: resumeDuration),
             zoomOut,
             .run { [weak self] in
                 self?.deathOverlay.run(fade)
@@ -172,7 +176,7 @@ extension TubeScene {
         ]))
 
         run(.sequence([
-            .wait(forDuration: zoomDuration + ringDelay),
+            .wait(forDuration: zoomDuration + ringDelay + holdDuration + resumeDuration + zoomOutDuration),
             impact
         ]))
     }
