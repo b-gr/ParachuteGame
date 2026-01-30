@@ -14,15 +14,15 @@ public final class TubeScene: SKScene {
         public var powerupSpawnInterval: TimeInterval = 9.0
         public var coinSpawnInterval: TimeInterval = 1.35
         public var cloudSpawnInterval: TimeInterval = 1.8
-
         public var shieldDuration: TimeInterval = 6.0
+        public var boostDuration: TimeInterval = 2.2
+        public var slowDuration: TimeInterval = 2.8
 
         public init() {}
     }
 
     private enum Category {
         static let player: UInt32 = 1 << 0
-        static let wall: UInt32 = 1 << 1
         static let obstacle: UInt32 = 1 << 2
         static let pickup: UInt32 = 1 << 3
         static let coin: UInt32 = 1 << 4
@@ -43,6 +43,7 @@ public final class TubeScene: SKScene {
     private enum RunState {
         case ready
         case playing
+        case deathCinematic
         case enteringName
         case showingScores
     }
@@ -57,6 +58,7 @@ public final class TubeScene: SKScene {
 
     public var config = Config()
 
+    private let cameraNode = SKCameraNode()
     private let farBackgroundLayer = SKNode()
     private let backgroundLayer = SKNode()
     private let world = SKNode()
@@ -68,6 +70,8 @@ public final class TubeScene: SKScene {
 
     private let scoreLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
     private let statusLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let scorePanel = SKShapeNode(rectOf: CGSize(width: 340, height: 420), cornerRadius: 16)
+    private let deathOverlay = SKShapeNode(rectOf: CGSize(width: 390, height: 844), cornerRadius: 0)
 
     private var elapsed: TimeInterval = 0
     private var lastUpdateTime: TimeInterval?
@@ -80,12 +84,12 @@ public final class TubeScene: SKScene {
 
     private var nextMilestoneSeconds: Int = 10
 
-    private var runState: RunState = .playing
+    private var runState: RunState = .ready
 
     private var shieldRemaining: TimeInterval = 0
-    private var speedScale: CGFloat = 1
     private var boostRemaining: TimeInterval = 0
     private var slowRemaining: TimeInterval = 0
+    private var speedScale: CGFloat = 1
     private var coinsThisRun: Int = 0
 
     private var inputMode: InputMode = .pointer
@@ -98,6 +102,9 @@ public final class TubeScene: SKScene {
 
     private let rocketArt = SKNode()
     private let parachuteArt = SKNode()
+    private let rocketFuelBar = SKNode()
+    private let rocketFuelBack = SKShapeNode()
+    private let rocketFuelFill = SKShapeNode()
 
     private var startParachuteVisible = true
 
@@ -109,6 +116,10 @@ public final class TubeScene: SKScene {
 
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
+
+        cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
+        addChild(cameraNode)
+        camera = cameraNode
 
         farBackgroundLayer.zPosition = -120
         addChild(farBackgroundLayer)
@@ -122,6 +133,7 @@ public final class TubeScene: SKScene {
         setupPlayer()
         setupHUD()
         loadHighScores()
+        setupDeathOverlay()
         resetRun()
     }
 
@@ -130,14 +142,14 @@ public final class TubeScene: SKScene {
         setupBackground()
         layoutHUD()
         layoutPlayer()
+        cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
+        deathOverlay.path = CGPath(rect: CGRect(x: frame.midX - frame.width / 2, y: frame.midY - frame.height / 2, width: frame.width, height: frame.height), transform: nil)
     }
 
     private func setupBackground() {
-        // Remove old tube remnants if present.
         childNode(withName: "tube")?.removeFromParent()
         physicsBody = nil
 
-        // Seed a few clouds when first created or when resized.
         if backgroundLayer.children.isEmpty {
             for i in 0..<7 {
                 let y = frame.minY + CGFloat(i) * (frame.height / 6.0)
@@ -169,6 +181,8 @@ public final class TubeScene: SKScene {
 
         setupShieldVisuals()
         setupModifierArt()
+        setupRocketFuelBar()
+        updatePlayerModifierArt()
     }
 
     private func setupModifierArt() {
@@ -178,6 +192,7 @@ public final class TubeScene: SKScene {
         parachuteArt.removeFromParent()
 
         rocketArt.addChild(makeRocketNode())
+        rocketArt.setScale(1.35)
         rocketArt.position = CGPoint(x: 0, y: -10)
         rocketArt.zPosition = -2
         rocketArt.isHidden = true
@@ -190,10 +205,33 @@ public final class TubeScene: SKScene {
         playerArt.addChild(parachuteArt)
     }
 
+    private func setupRocketFuelBar() {
+        rocketFuelBar.removeAllActions()
+        rocketFuelBar.removeFromParent()
+        rocketFuelBack.removeAllActions()
+        rocketFuelFill.removeAllActions()
+
+        rocketFuelBar.position = CGPoint(x: 0, y: 56)
+        rocketFuelBar.zPosition = 3
+
+        rocketFuelBack.path = CGPath(rect: CGRect(x: -32, y: -3, width: 64, height: 6), transform: nil)
+        rocketFuelBack.fillColor = SKColor(white: 0.10, alpha: 0.85)
+        rocketFuelBack.strokeColor = SKColor(white: 0.0, alpha: 0.4)
+        rocketFuelBack.lineWidth = 1
+
+        rocketFuelFill.path = CGPath(rect: CGRect(x: -30, y: -2, width: 60, height: 4), transform: nil)
+        rocketFuelFill.fillColor = SKColor(red: 0.98, green: 0.72, blue: 0.17, alpha: 0.95)
+        rocketFuelFill.strokeColor = .clear
+
+        rocketFuelBar.addChild(rocketFuelBack)
+        rocketFuelBar.addChild(rocketFuelFill)
+        rocketFuelBar.alpha = 0
+        playerArt.addChild(rocketFuelBar)
+    }
+
     private func rebuildPlayerArt() {
         playerArt.removeAllChildren()
 
-        // Cartoon skydiver: thick outline, bright suit, goggles.
         let outline = SKColor(white: 0.10, alpha: 0.95)
         let skin = SKColor(red: 0.98, green: 0.84, blue: 0.72, alpha: 1)
         let suit = SKColor(red: 0.95, green: 0.33, blue: 0.26, alpha: 1)
@@ -297,15 +335,15 @@ public final class TubeScene: SKScene {
 
         let r = config.playerRadius + 16
         shieldBubble.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2), transform: nil)
-        shieldBubble.fillColor = SKColor(red: 0.40, green: 0.72, blue: 0.98, alpha: 0.16)
-        shieldBubble.strokeColor = SKColor(red: 0.40, green: 0.72, blue: 0.98, alpha: 0.55)
+        shieldBubble.fillColor = SKColor(red: 0.10, green: 0.45, blue: 0.18, alpha: 0.18)
+        shieldBubble.strokeColor = SKColor(red: 0.08, green: 0.55, blue: 0.20, alpha: 0.7)
         shieldBubble.lineWidth = 2
         shieldBubble.zPosition = -1
         shieldBubble.isHidden = true
 
         shieldRim.fillColor = .clear
-        shieldRim.strokeColor = SKColor(red: 0.40, green: 0.72, blue: 0.98, alpha: 0.95)
-        shieldRim.lineWidth = 4
+        shieldRim.strokeColor = SKColor(red: 0.08, green: 0.55, blue: 0.20, alpha: 0.95)
+        shieldRim.lineWidth = 6
         shieldRim.lineCap = .round
         shieldRim.zPosition = 0
         shieldRim.isHidden = true
@@ -404,7 +442,7 @@ public final class TubeScene: SKScene {
         flame.strokeColor = .clear
         flame.name = "flame"
         flame.run(.repeatForever(.sequence([
-            .scale(to: 1.12, duration: 0.10),
+            .scale(to: 1.15, duration: 0.10),
             .scale(to: 0.95, duration: 0.10)
         ])))
 
@@ -426,18 +464,34 @@ public final class TubeScene: SKScene {
         hud.addChild(scoreLabel)
 
         statusLabel.fontSize = 18
-        statusLabel.fontColor = SKColor(white: 0.92, alpha: 0.85)
+        statusLabel.fontColor = SKColor(white: 0.92, alpha: 0.95)
         statusLabel.horizontalAlignmentMode = .center
         statusLabel.verticalAlignmentMode = .center
-        statusLabel.zPosition = 50
+        statusLabel.zPosition = 51
         hud.addChild(statusLabel)
 
+        scorePanel.fillColor = SKColor(white: 0.05, alpha: 0.88)
+        scorePanel.strokeColor = .clear
+        scorePanel.zPosition = 50
+        scorePanel.isHidden = true
+        hud.addChild(scorePanel)
+
         layoutHUD()
+    }
+
+    private func setupDeathOverlay() {
+        deathOverlay.fillColor = SKColor(white: 0.0, alpha: 1)
+        deathOverlay.strokeColor = .clear
+        deathOverlay.alpha = 0
+        deathOverlay.zPosition = 40
+        deathOverlay.path = CGPath(rect: CGRect(x: frame.midX - frame.width / 2, y: frame.midY - frame.height / 2, width: frame.width, height: frame.height), transform: nil)
+        addChild(deathOverlay)
     }
 
     private func layoutHUD() {
         scoreLabel.position = CGPoint(x: frame.minX + 18, y: frame.maxY - 14)
         statusLabel.position = CGPoint(x: frame.midX, y: frame.midY)
+        scorePanel.position = CGPoint(x: frame.midX, y: frame.midY)
     }
 
     private func layoutPlayer() {
@@ -448,6 +502,9 @@ public final class TubeScene: SKScene {
     private func resetRun() {
         runState = .ready
         world.isPaused = true
+        world.speed = 1
+        backgroundLayer.speed = 1
+        farBackgroundLayer.speed = 1
         elapsed = 0
         lastUpdateTime = nil
         intensity = 0
@@ -458,18 +515,24 @@ public final class TubeScene: SKScene {
         cloudSpawnTimer = 0
 
         shieldRemaining = 0
-        speedScale = 1
         boostRemaining = 0
         slowRemaining = 0
+        speedScale = 1
         coinsThisRun = 0
         shieldWasActive = false
         shieldBubble.isHidden = true
         shieldRim.isHidden = true
+        rocketFuelBar.alpha = 0
+        deathOverlay.alpha = 0
+        cameraNode.removeAllActions()
+        cameraNode.setScale(1)
+        cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
 
         startParachuteVisible = true
 
         statusLabel.numberOfLines = 0
         statusLabel.text = "Click / Press Space to Start"
+        scorePanel.isHidden = true
         nameBuffer = ""
         nextMilestoneSeconds = 10
 
@@ -477,9 +540,12 @@ public final class TubeScene: SKScene {
         backgroundLayer.removeAllChildren()
         farBackgroundLayer.removeAllChildren()
         setupBackground()
+        player.removeAllActions()
+        player.zRotation = 0
+        playerArt.zRotation = 0
         player.physicsBody?.velocity = .zero
+        player.physicsBody?.isDynamic = true
         layoutPlayer()
-
         updatePlayerModifierArt()
     }
 
@@ -493,18 +559,18 @@ public final class TubeScene: SKScene {
 
         let dt = min(1.0 / 30.0, currentTime - lastUpdateTime)
         self.lastUpdateTime = currentTime
+
         switch runState {
         case .ready:
             stepReady(dt: dt)
         case .playing:
             stepPlaying(dt: dt)
-        case .enteringName, .showingScores:
+        case .deathCinematic, .enteringName, .showingScores:
             break
         }
     }
 
     private func stepReady(dt: TimeInterval) {
-        // Background only; no scoring or obstacles yet.
         driveBackground(dt: dt)
         spawnClouds(dt: dt)
         cleanupClouds()
@@ -535,7 +601,6 @@ public final class TubeScene: SKScene {
         if slowRemaining > 0 {
             slowRemaining = max(0, slowRemaining - dt)
         }
-
         if shieldRemaining > 0 {
             shieldRemaining = max(0, shieldRemaining - dt)
         }
@@ -552,6 +617,34 @@ public final class TubeScene: SKScene {
     private func updatePlayerModifierArt() {
         rocketArt.isHidden = !(boostRemaining > 0)
         parachuteArt.isHidden = !((slowRemaining > 0) || (runState == .ready && startParachuteVisible))
+        updateRocketFuelBar()
+    }
+
+    private func updateRocketFuelBar() {
+        guard boostRemaining > 0 else {
+            rocketFuelBar.alpha = 0
+            rocketFuelBar.removeAllActions()
+            return
+        }
+
+        let frac = max(0, CGFloat(boostRemaining / config.boostDuration))
+        let width = 60 * frac
+        let rect = CGRect(x: -30, y: -2, width: width, height: 4)
+        rocketFuelFill.path = CGPath(rect: rect, transform: nil)
+
+        rocketFuelBar.alpha = 1
+        if boostRemaining < 0.2 {
+            if rocketFuelBar.action(forKey: "flash") == nil {
+                let flash = SKAction.sequence([
+                    .fadeAlpha(to: 0.4, duration: 0.12),
+                    .fadeAlpha(to: 1.0, duration: 0.12)
+                ])
+                rocketFuelBar.run(.repeatForever(flash), withKey: "flash")
+            }
+        } else {
+            rocketFuelBar.removeAction(forKey: "flash")
+            rocketFuelBar.alpha = 1
+        }
     }
 
     private func currentScrollSpeed() -> CGFloat {
@@ -586,7 +679,6 @@ public final class TubeScene: SKScene {
         let maxX = frame.maxX + allowOffscreen
 
         #if os(iOS)
-        // Touch controls: wrap like the iPhone version.
         if player.position.x < frame.minX - config.playerRadius {
             player.position.x = frame.maxX + config.playerRadius
         } else if player.position.x > frame.maxX + config.playerRadius {
@@ -607,13 +699,11 @@ public final class TubeScene: SKScene {
     }
 
     private func driveWorld(dt: TimeInterval) {
-        let scrollSpeed = lerp(config.baseScrollSpeed, config.maxScrollSpeed, intensity) * speedScale
+        let scrollSpeed = currentScrollSpeed()
 
         world.enumerateChildNodes(withName: "obstacle") { node, _ in
             if let body = node.physicsBody {
                 body.velocity = CGVector(dx: body.velocity.dx, dy: scrollSpeed)
-
-                // Visual banking based on lateral speed.
                 let bank = max(-0.35, min(0.35, -body.velocity.dx / 900))
                 node.zRotation = bank
                 node.xScale = body.velocity.dx < 0 ? -abs(node.xScale) : abs(node.xScale)
@@ -669,7 +759,6 @@ public final class TubeScene: SKScene {
         bird.physicsBody?.collisionBitMask = Category.player
         bird.physicsBody?.contactTestBitMask = Category.player
 
-        // Aim birds to cross near the player's Y, including edge sweepers.
         let scroll = max(1, currentScrollSpeed())
         let playerY = player.position.y
         let dy = max(120, playerY - spawnY)
@@ -705,8 +794,6 @@ public final class TubeScene: SKScene {
 
     private func makeBirdNode() -> SKNode {
         let node = SKNode()
-
-        // Ground-up bird: cleaner silhouette with readable wing flap.
         let outline = SKColor(white: 0.06, alpha: 0.55)
 
         struct Palette {
@@ -723,7 +810,7 @@ public final class TubeScene: SKScene {
         ]
         let palette = palettes.randomElement() ?? palettes[0]
 
-        let scale = CGFloat.random(in: 0.88...1.22)
+        let scale = CGFloat.random(in: 0.5...1.0)
         let hitW: CGFloat = 70 * scale
         let hitH: CGFloat = 28 * scale
         let data = NSMutableDictionary()
@@ -790,15 +877,15 @@ public final class TubeScene: SKScene {
         tail.lineWidth = 2
         tail.alpha = 0.95
 
-        func wing() -> SKNode {
+        func wing(isLeft: Bool) -> SKNode {
             let pivot = SKNode()
             pivot.position = CGPoint(x: 0, y: 5)
 
             let wingPath = CGMutablePath()
             wingPath.move(to: CGPoint(x: -4, y: 0))
-            wingPath.addQuadCurve(to: CGPoint(x: -44, y: 10), control: CGPoint(x: -26, y: 24))
-            wingPath.addQuadCurve(to: CGPoint(x: -18, y: -8), control: CGPoint(x: -46, y: 0))
-            wingPath.addQuadCurve(to: CGPoint(x: -4, y: 0), control: CGPoint(x: -10, y: -2))
+            wingPath.addQuadCurve(to: CGPoint(x: isLeft ? -44 : 44, y: 10), control: CGPoint(x: isLeft ? -26 : 26, y: 24))
+            wingPath.addQuadCurve(to: CGPoint(x: isLeft ? -18 : 18, y: -8), control: CGPoint(x: isLeft ? -46 : 46, y: 0))
+            wingPath.addQuadCurve(to: CGPoint(x: -4, y: 0), control: CGPoint(x: isLeft ? -10 : 10, y: -2))
             wingPath.closeSubpath()
             let w = SKShapeNode(path: wingPath)
             w.fillColor = palette.wing
@@ -807,7 +894,6 @@ public final class TubeScene: SKScene {
             w.alpha = 0.98
             w.position = CGPoint(x: 2, y: -1)
 
-            // Feather hints.
             let feather = SKShapeNode()
             let fp = CGMutablePath()
             fp.move(to: CGPoint(x: -30, y: 6))
@@ -824,22 +910,34 @@ public final class TubeScene: SKScene {
             return pivot
         }
 
-        let wingNode = wing()
-        wingNode.zPosition = -1
+        let leftWing = wing(isLeft: true)
+        let rightWing = wing(isLeft: false)
+        rightWing.xScale = -1
 
         node.addChild(tail)
-        node.addChild(wingNode)
+        node.addChild(leftWing)
+        node.addChild(rightWing)
         node.addChild(body)
         node.addChild(head)
         node.addChild(beak)
         node.addChild(eyeWhite)
 
         let flapSpeed = TimeInterval(CGFloat.random(in: 0.11...0.16))
-        let flap = SKAction.sequence([
-            .rotate(toAngle: 0.45, duration: flapSpeed),
-            .rotate(toAngle: -0.10, duration: flapSpeed)
+        let leftFlap = SKAction.sequence([
+            .rotate(toAngle: 0.55, duration: flapSpeed),
+            .rotate(toAngle: -0.12, duration: flapSpeed)
         ])
-        wingNode.run(.repeatForever(flap))
+        let rightFlap = SKAction.sequence([
+            .rotate(toAngle: -0.55, duration: flapSpeed),
+            .rotate(toAngle: 0.12, duration: flapSpeed)
+        ])
+        leftWing.run(.repeatForever(leftFlap))
+        rightWing.run(.repeatForever(rightFlap))
+
+        node.run(.repeatForever(.sequence([
+            .moveBy(x: 0, y: 2.4, duration: 0.35),
+            .moveBy(x: 0, y: -2.4, duration: 0.35)
+        ])))
 
         node.setScale(scale)
         return node
@@ -883,7 +981,7 @@ public final class TubeScene: SKScene {
         node.addChild(icon)
 
         node.run(.repeatForever(.sequence([
-            .scale(to: 1.08, duration: 0.4),
+            .scale(to: 1.12, duration: 0.4),
             .scale(to: 1.0, duration: 0.4)
         ])))
 
@@ -912,11 +1010,11 @@ public final class TubeScene: SKScene {
             let s = SKShapeNode(path: path)
             s.fillColor = SKColor(white: 0.98, alpha: 0.9)
             s.strokeColor = outline
-            s.lineWidth = 2
+            s.lineWidth = 3
             return s
         case .boost:
             let r = makeRocketNode()
-            r.setScale(0.65)
+            r.setScale(0.7)
             return r
         case .slow:
             let pack = SKShapeNode(rectOf: CGSize(width: 16, height: 18), cornerRadius: 4)
@@ -993,12 +1091,14 @@ public final class TubeScene: SKScene {
     }
 
     private func spawnMilestonePlane(seconds: Int) {
-        let fromLeft = Bool.random()
+        let goRight = Bool.random()
         let y = CGFloat.random(in: (frame.minY + frame.height * 0.25)...(frame.minY + frame.height * 0.55))
 
         let plane = SKNode()
         plane.name = "plane"
-        plane.position = CGPoint(x: fromLeft ? frame.minX - 140 : frame.maxX + 140, y: y)
+        let startX = goRight ? frame.minX - 140 : frame.maxX + 140
+        let endX = goRight ? frame.maxX + 140 : frame.minX - 140
+        plane.position = CGPoint(x: startX, y: y)
         plane.zPosition = -120
 
         let outline = SKColor(white: 0.12, alpha: 0.9)
@@ -1052,13 +1152,13 @@ public final class TubeScene: SKScene {
         plane.addChild(wing)
         plane.addChild(tail)
 
-        if !fromLeft {
+        if !goRight {
             plane.xScale = -1
+            banner.xScale = -1
         }
 
-        let distance = frame.width + 320
         let duration = TimeInterval(CGFloat.random(in: 6.0...8.5))
-        let move = SKAction.moveBy(x: fromLeft ? distance : -distance, y: 0, duration: duration)
+        let move = SKAction.moveTo(x: endX, duration: duration)
         plane.run(.sequence([move, .removeFromParent()]))
 
         farBackgroundLayer.addChild(plane)
@@ -1163,7 +1263,7 @@ public final class TubeScene: SKScene {
         backgroundLayer.addChild(cloud)
     }
 
-    private func handleHit() {
+    private func handleHit(contact: SKPhysicsContact, bird: SKNode) {
         guard runState == .playing else { return }
 
         if shieldRemaining > 0 {
@@ -1171,7 +1271,7 @@ public final class TubeScene: SKScene {
             return
         }
 
-        gameOver()
+        startDeathCinematic(contact: contact, bird: bird)
     }
 
     private func flashPlayer() {
@@ -1190,18 +1290,112 @@ public final class TubeScene: SKScene {
         }
     }
 
-    private func gameOver() {
+    private func startDeathCinematic(contact: SKPhysicsContact, bird: SKNode) {
+        runState = .deathCinematic
+
+        world.speed = 0.2
+        backgroundLayer.speed = 0.2
+        farBackgroundLayer.speed = 0.2
+
+        player.physicsBody?.velocity = .zero
+        player.physicsBody?.isDynamic = false
+
+        let hitW = (bird.userData?["hitW"] as? NSNumber).map { CGFloat(truncating: $0) } ?? 70
+        let dx = abs(contact.contactPoint.x - bird.position.x)
+        let edgeRatio = min(1, dx / max(1, hitW * 0.5))
+        let emphasis = pow(edgeRatio, 1.7)
+
+        let zoomScale = lerp(1.5, 2.1, emphasis)
+        let zoomDuration = TimeInterval(lerp(1.0, 0.55, emphasis))
+        let cameraScale = 1 / zoomScale
+
+        cameraNode.removeAllActions()
+        let move = SKAction.move(to: contact.contactPoint, duration: zoomDuration)
+        let scale = SKAction.scale(to: cameraScale, duration: zoomDuration)
+        move.timingMode = .easeInEaseOut
+        scale.timingMode = .easeInEaseOut
+
+        let zoom = SKAction.group([move, scale])
+        let knock = SKAction.run { [weak self] in
+            guard let self else { return }
+            self.showDizzyRing(at: CGPoint(x: self.player.position.x, y: self.player.position.y + 36))
+        }
+
+        let impact = SKAction.run { [weak self] in
+            guard let self else { return }
+            let hit = SKAction.group([
+                .rotate(byAngle: -1.6, duration: 0.45),
+                .moveBy(x: 0, y: -90, duration: 0.6)
+            ])
+            self.player.run(hit)
+        }
+
+        let fade = SKAction.sequence([
+            .wait(forDuration: 0.6),
+            .fadeAlpha(to: 1.0, duration: 0.8)
+        ])
+
+        cameraNode.run(.sequence([
+            zoom,
+            knock,
+            .wait(forDuration: 0.45),
+            impact,
+            .run { [weak self] in
+                self?.deathOverlay.run(fade)
+            },
+            .wait(forDuration: 1.2),
+            .run { [weak self] in
+                self?.finishDeathSequence()
+            }
+        ]))
+    }
+
+    private func finishDeathSequence() {
+        world.speed = 1
+        backgroundLayer.speed = 1
+        farBackgroundLayer.speed = 1
+
+        cameraNode.removeAllActions()
+        cameraNode.setScale(1)
+        cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
+
+        presentNameEntry()
+    }
+
+    private func showDizzyRing(at position: CGPoint) {
+        let ring = SKShapeNode(circleOfRadius: 18)
+        ring.strokeColor = SKColor(white: 0.98, alpha: 1)
+        ring.lineWidth = 4
+        ring.fillColor = .clear
+        ring.position = position
+        ring.zPosition = player.zPosition + 3
+        addChild(ring)
+
+        let spin = SKAction.repeatForever(.rotate(byAngle: 0.6, duration: 0.16))
+        let pulse = SKAction.sequence([
+            .scale(to: 1.15, duration: 0.25),
+            .scale(to: 1.0, duration: 0.25)
+        ])
+        let fade = SKAction.sequence([
+            .wait(forDuration: 1.0),
+            .fadeAlpha(to: 0.0, duration: 0.5),
+            .removeFromParent()
+        ])
+
+        ring.run(spin, withKey: "spin")
+        ring.run(.repeatForever(pulse), withKey: "pulse")
+        ring.run(fade)
+    }
+
+    private func presentNameEntry() {
         runState = .enteringName
         world.isPaused = true
-        player.physicsBody?.velocity = .zero
-        world.enumerateChildNodes(withName: "obstacle") { node, _ in
-            node.physicsBody?.velocity = .zero
-        }
 
         let seconds = Int(elapsed)
         let multiplier = 1 + coinsThisRun
         let score = seconds * multiplier
 
+        scorePanel.isHidden = false
         statusLabel.numberOfLines = 0
         statusLabel.text = "Game Over\nTime: \(seconds)s  Coins: \(coinsThisRun)  x\(multiplier)\nScore: \(score)\n\nEnter your name and press Return:\n\(nameBuffer.isEmpty ? "_" : nameBuffer)"
     }
@@ -1213,16 +1407,14 @@ public final class TubeScene: SKScene {
         world.isPaused = false
         statusLabel.text = ""
 
-        if startParachuteVisible {
-            startParachuteVisible = false
-            breakParachute()
-        }
-
-        updatePlayerModifierArt()
+        breakParachute()
     }
 
     private func breakParachute() {
-        // Detach a copy of the canopy and let it drift away.
+        guard startParachuteVisible else { return }
+        startParachuteVisible = false
+        updatePlayerModifierArt()
+
         let canopy = makeParachuteNode()
         canopy.setScale(0.95)
 
@@ -1282,10 +1474,10 @@ public final class TubeScene: SKScene {
             shieldRim.isHidden = false
             updateShieldVisuals(force: true)
         case kindKey(.boost):
-            boostRemaining = 2.2
+            boostRemaining = config.boostDuration
             slowRemaining = 0
         case kindKey(.slow):
-            slowRemaining = 2.8
+            slowRemaining = config.slowDuration
             boostRemaining = 0
         case kindKey(.coin):
             coinsThisRun += 1
@@ -1305,7 +1497,6 @@ public final class TubeScene: SKScene {
                 shieldBubble.removeAllActions()
                 shieldRim.removeAllActions()
 
-                // Brief red warning then fade out.
                 shieldBubble.isHidden = false
                 shieldRim.isHidden = false
                 shieldBubble.strokeColor = SKColor(red: 0.98, green: 0.22, blue: 0.20, alpha: 0.8)
@@ -1314,17 +1505,23 @@ public final class TubeScene: SKScene {
                     .wait(forDuration: 0.12),
                     .fadeAlpha(to: 0.0, duration: 0.22),
                     .run { [weak self] in
-                        guard let self else { return }
-                        self.shieldBubble.alpha = 1
-                        self.shieldRim.alpha = 1
-                        self.shieldBubble.isHidden = true
-                        self.shieldRim.isHidden = true
+                        self?.shieldBubble.alpha = 1
+                        self?.shieldRim.alpha = 1
+                        self?.shieldBubble.isHidden = true
+                        self?.shieldRim.isHidden = true
                     }
                 ])
                 shieldBubble.run(flash)
-                shieldRim.run(.sequence([.wait(forDuration: 0.12), .fadeAlpha(to: 0.0, duration: 0.22), .run { [weak self] in
-                    self?.shieldRim.alpha = 1
-                }]))
+                shieldRim.run(.sequence([
+                    .wait(forDuration: 0.12),
+                    .fadeAlpha(to: 0.0, duration: 0.22),
+                    .run { [weak self] in
+                        self?.shieldBubble.alpha = 1
+                        self?.shieldRim.alpha = 1
+                        self?.shieldBubble.isHidden = true
+                        self?.shieldRim.isHidden = true
+                    }
+                ]))
             }
             return
         }
@@ -1342,17 +1539,16 @@ public final class TubeScene: SKScene {
         let path = CGMutablePath()
         path.addArc(center: .zero, radius: r, startAngle: start, endAngle: end, clockwise: true)
         shieldRim.path = path
+        shieldRim.lineWidth = 6
 
         if shieldRemaining < 0.9 {
             shieldBubble.strokeColor = SKColor(red: 0.98, green: 0.22, blue: 0.20, alpha: 0.65)
             shieldRim.strokeColor = SKColor(red: 0.98, green: 0.22, blue: 0.20, alpha: 0.95)
         } else {
-            shieldBubble.strokeColor = SKColor(red: 0.40, green: 0.72, blue: 0.98, alpha: 0.55)
-            shieldRim.strokeColor = SKColor(red: 0.40, green: 0.72, blue: 0.98, alpha: 0.95)
+            shieldBubble.strokeColor = SKColor(red: 0.08, green: 0.55, blue: 0.20, alpha: 0.7)
+            shieldRim.strokeColor = SKColor(red: 0.08, green: 0.55, blue: 0.20, alpha: 0.95)
         }
     }
-
-    // MARK: - Input
 
     #if os(macOS)
     public override func mouseDown(with event: NSEvent) {
@@ -1370,9 +1566,7 @@ public final class TubeScene: SKScene {
     }
 
     public override func mouseDragged(with event: NSEvent) {
-        if runState != .playing {
-            return
-        }
+        if runState != .playing { return }
         inputMode = .pointer
         targetX = convertPoint(fromView: event.locationInWindow).x
     }
@@ -1399,9 +1593,9 @@ public final class TubeScene: SKScene {
 
         inputMode = .keyboard
         switch event.keyCode {
-        case 123: // left
+        case 123:
             leftKeyDown = true
-        case 124: // right
+        case 124:
             rightKeyDown = true
         default:
             break
@@ -1409,9 +1603,7 @@ public final class TubeScene: SKScene {
     }
 
     public override func keyUp(with event: NSEvent) {
-        if runState != .playing {
-            return
-        }
+        if runState != .playing { return }
         switch event.keyCode {
         case 123:
             leftKeyDown = false
@@ -1433,24 +1625,20 @@ public final class TubeScene: SKScene {
     }
 
     public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if runState != .playing {
-            return
-        }
+        if runState != .playing { return }
         inputMode = .pointer
         targetX = touches.first.map { $0.location(in: self).x }
     }
     #endif
 
-    // MARK: - Helpers
-
     private func handleNameEntryKeyDown(_ event: NSEvent) {
         switch event.keyCode {
-        case 51: // delete
+        case 51:
             if !nameBuffer.isEmpty {
                 nameBuffer.removeLast()
             }
             refreshNamePrompt()
-        case 36: // return
+        case 36:
             saveCurrentScore()
         default:
             guard let chars = event.characters, !chars.isEmpty else { return }
@@ -1472,6 +1660,7 @@ public final class TubeScene: SKScene {
         let seconds = Int(elapsed)
         let multiplier = 1 + coinsThisRun
         let score = seconds * multiplier
+        scorePanel.isHidden = false
         statusLabel.numberOfLines = 0
         statusLabel.text = "Game Over\nTime: \(seconds)s  Coins: \(coinsThisRun)  x\(multiplier)\nScore: \(score)\n\nEnter your name and press Return:\n\(nameBuffer.isEmpty ? "_" : nameBuffer)"
     }
@@ -1503,6 +1692,7 @@ public final class TubeScene: SKScene {
 
         runState = .showingScores
         statusLabel.numberOfLines = 0
+        scorePanel.isHidden = false
         statusLabel.text = leaderboardText(current: entry)
     }
 
@@ -1532,7 +1722,7 @@ public final class TubeScene: SKScene {
             let data = try JSONEncoder().encode(highScores)
             UserDefaults.standard.set(data, forKey: "TubeDiverHighScores")
         } catch {
-            // Ignore persistence errors for prototype.
+            // ignore for prototype
         }
     }
 
@@ -1580,7 +1770,10 @@ extension TubeScene: @preconcurrency SKPhysicsContactDelegate {
         }
 
         if isPair(a, b, Category.player, Category.obstacle) {
-            handleHit()
+            let birdBody = a.categoryBitMask == Category.obstacle ? a : b
+            if let birdNode = birdBody.node {
+                handleHit(contact: contact, bird: birdNode)
+            }
             return
         }
     }
