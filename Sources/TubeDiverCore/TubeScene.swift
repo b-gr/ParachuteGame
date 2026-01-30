@@ -111,10 +111,37 @@ public final class TubeScene: SKScene {
 
     private var nameBuffer: String = ""
     private var highScores: [ScoreEntry] = []
+    private var pendingScene: TubeScene?
+    private var isSceneReadyForRestart = false
 
     public override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.47, green: 0.73, blue: 0.96, alpha: 1)
 
+        physicsWorld.gravity = .zero
+        physicsWorld.contactDelegate = self
+
+        cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
+        addChild(cameraNode)
+        camera = cameraNode
+
+        farBackgroundLayer.zPosition = -120
+        addChild(farBackgroundLayer)
+
+        backgroundLayer.zPosition = -100
+        addChild(backgroundLayer)
+        addChild(world)
+        addChild(hud)
+
+        setupBackground()
+        setupPlayer()
+        setupHUD()
+        loadHighScores()
+        setupDeathOverlay()
+        resetRun()
+    }
+
+    private func preloadScene() {
+        backgroundColor = SKColor(red: 0.47, green: 0.73, blue: 0.96, alpha: 1)
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
 
@@ -538,6 +565,8 @@ public final class TubeScene: SKScene {
         cameraNode.removeAllActions()
         cameraNode.setScale(1)
         cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
+        pendingScene = nil
+        isSceneReadyForRestart = false
 
         startParachuteVisible = true
 
@@ -1434,6 +1463,7 @@ public final class TubeScene: SKScene {
         scorePanel.isHidden = false
         statusLabel.numberOfLines = 0
         statusLabel.text = "Game Over\nTime: \(seconds)s  Coins: \(coinsThisRun)  x\(multiplier)\nScore: \(score)\n\nEnter your name and press Return:\n\(nameBuffer.isEmpty ? "_" : nameBuffer)"
+        startBackgroundSceneBuild()
     }
 
     private func startRun() {
@@ -1589,7 +1619,9 @@ public final class TubeScene: SKScene {
     #if os(macOS)
     public override func mouseDown(with event: NSEvent) {
         if runState == .showingScores {
-            resetRun()
+            if isSceneReadyForRestart, let next = pendingScene {
+                view?.presentScene(next, transition: .fade(withDuration: 0.35))
+            }
             return
         }
         if runState == .ready {
@@ -1615,7 +1647,9 @@ public final class TubeScene: SKScene {
 
         if runState == .showingScores {
             if event.keyCode == 36 { // return
-                resetRun()
+                if isSceneReadyForRestart, let next = pendingScene {
+                    view?.presentScene(next, transition: .fade(withDuration: 0.35))
+                }
             }
             return
         }
@@ -1653,6 +1687,12 @@ public final class TubeScene: SKScene {
     public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if runState == .ready {
             startRun()
+            return
+        }
+        if runState == .showingScores {
+            if isSceneReadyForRestart, let next = pendingScene {
+                view?.presentScene(next, transition: .fade(withDuration: 0.35))
+            }
             return
         }
         if runState != .playing { return }
@@ -1739,8 +1779,23 @@ public final class TubeScene: SKScene {
         for (i, e) in highScores.enumerated() {
             lines.append("\(i + 1). \(e.name)  \(e.score)  (\(e.seconds)s, \(e.coins) coins)")
         }
-        lines.append("\nClick (or press Return) to restart")
+        let restartLine = isSceneReadyForRestart ? "Click (or press Return) to restart" : "LOADING..."
+        lines.append("\n\(restartLine)")
         return lines.joined(separator: "\n")
+    }
+
+    private func startBackgroundSceneBuild() {
+        guard pendingScene == nil, isSceneReadyForRestart == false else { return }
+
+        let next = TubeScene(size: size)
+        next.scaleMode = .aspectFit
+        next.preloadScene()
+        pendingScene = next
+        isSceneReadyForRestart = true
+
+        if runState == .showingScores {
+            statusLabel.text = leaderboardText(current: currentScoreEntry())
+        }
     }
 
     private func loadHighScores() {
