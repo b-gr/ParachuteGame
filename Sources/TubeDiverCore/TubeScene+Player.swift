@@ -143,19 +143,27 @@ extension TubeScene {
         rightArmPivot.zRotation = -0.22
         rightArmPivot.addChild(rightArm)
 
+        let leftLegPivot = SKNode()
+        leftLegPivot.name = "leftLeg"
+        leftLegPivot.position = CGPoint(x: -6, y: -12)
         let leftLeg = SKShapeNode(rectOf: CGSize(width: 6, height: 20), cornerRadius: 3)
         leftLeg.fillColor = suitDark
         leftLeg.strokeColor = outline
         leftLeg.lineWidth = 2
-        leftLeg.zRotation = 0.10
-        leftLeg.position = CGPoint(x: -6, y: -20)
+        leftLeg.position = CGPoint(x: 0, y: -10)
+        leftLegPivot.zRotation = 0.10
+        leftLegPivot.addChild(leftLeg)
 
+        let rightLegPivot = SKNode()
+        rightLegPivot.name = "rightLeg"
+        rightLegPivot.position = CGPoint(x: 6, y: -12)
         let rightLeg = SKShapeNode(rectOf: CGSize(width: 6, height: 20), cornerRadius: 3)
         rightLeg.fillColor = suitDark
         rightLeg.strokeColor = outline
         rightLeg.lineWidth = 2
-        rightLeg.zRotation = -0.10
-        rightLeg.position = CGPoint(x: 6, y: -20)
+        rightLeg.position = CGPoint(x: 0, y: -10)
+        rightLegPivot.zRotation = -0.10
+        rightLegPivot.addChild(rightLeg)
 
         let leftBoot = SKShapeNode(rectOf: CGSize(width: 10, height: 6), cornerRadius: 3)
         leftBoot.fillColor = boot
@@ -182,8 +190,8 @@ extension TubeScene {
         torso.addChild(belt)
         playerArt.addChild(leftArmPivot)
         playerArt.addChild(rightArmPivot)
-        playerArt.addChild(leftLeg)
-        playerArt.addChild(rightLeg)
+        playerArt.addChild(leftLegPivot)
+        playerArt.addChild(rightLegPivot)
         playerArt.addChild(head)
         playerArt.addChild(goggle)
     }
@@ -364,10 +372,15 @@ extension TubeScene {
         parachuteArt.isHidden = !((slowRemaining > 0) || (runState == .ready && startParachuteVisible))
         updateRocketFuelBar()
         updateArmFlail()
+        updateLegFlail()
     }
 
     func armBaseAngles() -> (left: CGFloat, right: CGFloat) {
         (1.92 - .pi, 1.22)
+    }
+
+    func legBaseAngles() -> (left: CGFloat, right: CGFloat) {
+        (0.10, -0.10)
     }
 
     func updateArmFlail() {
@@ -412,6 +425,48 @@ extension TubeScene {
         }
     }
 
+    func updateLegFlail() {
+        guard let leftLeg = playerArt.childNode(withName: "leftLeg"),
+              let rightLeg = playerArt.childNode(withName: "rightLeg") else { return }
+
+        if runState == .deathCinematic {
+            leftLeg.removeAction(forKey: "flail")
+            rightLeg.removeAction(forKey: "flail")
+            return
+        }
+
+        let base = legBaseAngles()
+        let baseLeft = base.left
+        let baseRight = base.right
+        let shouldFlail = runState == .playing && slowRemaining <= 0
+
+        if shouldFlail {
+            if leftLeg.action(forKey: "flail") == nil {
+                let leftSeq = SKAction.sequence([
+                    .rotate(toAngle: baseLeft + 0.45, duration: 0.12),
+                    .rotate(toAngle: baseLeft - 0.35, duration: 0.18),
+                    .rotate(toAngle: baseLeft + 0.25, duration: 0.14)
+                ])
+                leftSeq.timingMode = .easeInEaseOut
+                leftLeg.run(.repeatForever(leftSeq), withKey: "flail")
+            }
+            if rightLeg.action(forKey: "flail") == nil {
+                let rightSeq = SKAction.sequence([
+                    .rotate(toAngle: baseRight - 0.45, duration: 0.13),
+                    .rotate(toAngle: baseRight + 0.35, duration: 0.17),
+                    .rotate(toAngle: baseRight - 0.25, duration: 0.15)
+                ])
+                rightSeq.timingMode = .easeInEaseOut
+                rightLeg.run(.repeatForever(rightSeq), withKey: "flail")
+            }
+        } else {
+            leftLeg.removeAction(forKey: "flail")
+            rightLeg.removeAction(forKey: "flail")
+            leftLeg.zRotation = baseLeft
+            rightLeg.zRotation = baseRight
+        }
+    }
+
     func stopArmFlail(slowly: Bool) {
         guard let leftArm = playerArt.childNode(withName: "leftArm"),
               let rightArm = playerArt.childNode(withName: "rightArm") else { return }
@@ -439,6 +494,14 @@ extension TubeScene {
 
         leftArm.removeAction(forKey: "flail")
         rightArm.removeAction(forKey: "flail")
+    }
+
+    func freezeLegPose() {
+        guard let leftLeg = playerArt.childNode(withName: "leftLeg"),
+              let rightLeg = playerArt.childNode(withName: "rightLeg") else { return }
+
+        leftLeg.removeAction(forKey: "flail")
+        rightLeg.removeAction(forKey: "flail")
     }
 
     func ensurePlayerVisible() {

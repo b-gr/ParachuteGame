@@ -66,6 +66,7 @@ extension TubeScene {
     func startDeathCinematic(contact: SKPhysicsContact, bird: SKNode) {
         runState = .deathCinematic
         freezeArmPose()
+        freezeLegPose()
 
         player.physicsBody?.velocity = .zero
         player.physicsBody?.isDynamic = false
