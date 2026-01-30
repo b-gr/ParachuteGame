@@ -67,6 +67,7 @@ extension TubeScene {
         runState = .deathCinematic
         freezeArmPose()
         freezeLegPose()
+        stopTumbling(freeze: true)
 
         player.physicsBody?.velocity = .zero
         player.physicsBody?.isDynamic = false

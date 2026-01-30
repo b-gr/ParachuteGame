@@ -335,6 +335,14 @@ extension TubeScene {
             shieldRemaining = max(0, shieldRemaining - dt)
         }
 
+        let nowSlowActive = slowRemaining > 0
+        if !wasSlowActive && nowSlowActive {
+            handleSlowActivated()
+        } else if wasSlowActive && !nowSlowActive {
+            handleSlowEnded()
+        }
+        wasSlowActive = nowSlowActive
+
         var scale: CGFloat = 1
         if boostRemaining > 0 { scale *= 1.55 }
         if slowRemaining > 0 { scale *= 0.65 }
@@ -373,6 +381,7 @@ extension TubeScene {
         updateRocketFuelBar()
         updateArmFlail()
         updateLegFlail()
+        updateTumbleState()
     }
 
     func armBaseAngles() -> (left: CGFloat, right: CGFloat) {
@@ -381,6 +390,57 @@ extension TubeScene {
 
     func legBaseAngles() -> (left: CGFloat, right: CGFloat) {
         (0.10, -0.10)
+    }
+
+    func updateTumbleState() {
+        if runState == .deathCinematic {
+            stopTumbling(freeze: true)
+            return
+        }
+
+        if runState == .playing && slowRemaining <= 0 {
+            startTumblingIfNeeded()
+            return
+        }
+
+        if slowRemaining > 0 {
+            ensureUpright()
+        } else {
+            stopTumbling(freeze: true)
+        }
+    }
+
+    func startTumblingIfNeeded() {
+        guard playerArt.action(forKey: "tumble") == nil else { return }
+        playerArt.removeAction(forKey: "upright")
+        scheduleNextTumble()
+    }
+
+    func scheduleNextTumble() {
+        guard runState == .playing && slowRemaining <= 0 else { return }
+        let duration = TimeInterval(Double.random(in: 0.45...0.9))
+        let delta = CGFloat.random(in: -1.4...1.4)
+        let rotate = SKAction.rotate(byAngle: delta, duration: duration)
+        rotate.timingMode = .easeInEaseOut
+        let next = SKAction.run { [weak self] in
+            self?.scheduleNextTumble()
+        }
+        playerArt.run(.sequence([rotate, next]), withKey: "tumble")
+    }
+
+    func ensureUpright() {
+        guard playerArt.action(forKey: "upright") == nil else { return }
+        playerArt.removeAction(forKey: "tumble")
+        let upright = SKAction.rotate(toAngle: 0, duration: 1.0)
+        upright.timingMode = .easeOut
+        playerArt.run(upright, withKey: "upright")
+    }
+
+    func stopTumbling(freeze: Bool) {
+        playerArt.removeAction(forKey: "tumble")
+        if freeze {
+            playerArt.removeAction(forKey: "upright")
+        }
     }
 
     func updateArmFlail() {
@@ -586,9 +646,13 @@ extension TubeScene {
         #endif
     }
 
-    func breakParachute() {
-        guard startParachuteVisible else { return }
-        startParachuteVisible = false
+    func breakParachute(force: Bool = false) {
+        if !force {
+            guard startParachuteVisible else { return }
+            startParachuteVisible = false
+        } else {
+            guard !parachuteArt.isHidden else { return }
+        }
         updatePlayerModifierArt()
 
         let canopy = makeParachuteNode()
@@ -638,5 +702,26 @@ extension TubeScene {
             drift,
             .removeFromParent()
         ]))
+    }
+
+    func handleSlowActivated() {
+        showParachutePop()
+        ensureUpright()
+    }
+
+    func handleSlowEnded() {
+        breakParachute(force: true)
+        startTumblingIfNeeded()
+    }
+
+    func showParachutePop() {
+        parachuteArt.isHidden = false
+        parachuteArt.removeAllActions()
+        parachuteArt.setScale(0.6)
+        parachuteArt.alpha = 0
+        let scaleUp = SKAction.scale(to: 1.0, duration: 0.2)
+        scaleUp.timingMode = .easeOut
+        let fadeIn = SKAction.fadeAlpha(to: 1.0, duration: 0.2)
+        parachuteArt.run(.group([scaleUp, fadeIn]), withKey: "parachutePop")
     }
 }

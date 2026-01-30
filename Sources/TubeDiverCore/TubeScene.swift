@@ -16,7 +16,7 @@ public final class TubeScene: SKScene {
         public var cloudSpawnInterval: TimeInterval = 1.8
         public var shieldDuration: TimeInterval = 6.0
         public var boostDuration: TimeInterval = 2.2
-        public var slowDuration: TimeInterval = 2.8
+        public var slowDuration: TimeInterval = 3.8
 
         public init() {}
     }
@@ -90,6 +90,7 @@ public final class TubeScene: SKScene {
     var shieldRemaining: TimeInterval = 0
     var boostRemaining: TimeInterval = 0
     var slowRemaining: TimeInterval = 0
+    var wasSlowActive = false
     var speedScale: CGFloat = 1
     var coinsThisRun: Int = 0
 
@@ -170,6 +171,7 @@ public final class TubeScene: SKScene {
         shieldRemaining = 0
         boostRemaining = 0
         slowRemaining = 0
+        wasSlowActive = false
         speedScale = 1
         coinsThisRun = 0
         shieldWasActive = false
