@@ -2,6 +2,33 @@ import Foundation
 import SpriteKit
 
 extension TubeScene {
+    public var isEnteringName: Bool {
+        runState == .enteringName
+    }
+
+    public func currentNameBuffer() -> String {
+        nameBuffer
+    }
+
+    public func updateNameBuffer(_ raw: String) {
+        guard runState == .enteringName else { return }
+        let filtered = raw.unicodeScalars.compactMap { scalar -> Character? in
+            if scalar.value == 0x1B { return nil }
+            let c = Character(scalar)
+            if c.isLetter || c.isNumber || c == " " || c == "-" || c == "_" {
+                return c
+            }
+            return nil
+        }
+        nameBuffer = String(filtered.prefix(14))
+        refreshNamePrompt()
+    }
+
+    public func submitNameEntry() {
+        guard runState == .enteringName else { return }
+        saveCurrentScore()
+    }
+
     func updateMilestones() {
         let s = Int(elapsed)
         while s >= nextMilestoneSeconds {
@@ -37,6 +64,7 @@ extension TubeScene {
         statusLabel.text = "Game Over\nTime: \(seconds)s  Coins: \(coinsThisRun)  \nScore: \(score)\n\nEnter your name and press Return:\n\(nameBuffer.isEmpty ? "_" : nameBuffer)"
     }
 
+    #if os(macOS)
     func handleNameEntryKeyDown(_ event: NSEvent) {
         switch event.keyCode {
         case 51:
@@ -60,6 +88,7 @@ extension TubeScene {
             refreshNamePrompt()
         }
     }
+    #endif
 
     func refreshNamePrompt() {
         guard runState == .enteringName else { return }

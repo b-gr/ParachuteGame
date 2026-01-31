@@ -6,11 +6,13 @@ import PackageDescription
 let package = Package(
     name: "TubeDiver",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v13),
+        .iOS(.v16)
     ],
     products: [
         .library(name: "TubeDiverCore", targets: ["TubeDiverCore"]),
         .executable(name: "TubeDiverMacApp", targets: ["TubeDiverMacApp"]),
+        .executable(name: "TubeDiveriOSApp", targets: ["TubeDiveriOSApp"]),
     ],
     targets: [
         .target(
@@ -19,6 +21,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "TubeDiverMacApp",
+            dependencies: ["TubeDiverCore"]
+        ),
+        .executableTarget(
+            name: "TubeDiveriOSApp",
             dependencies: ["TubeDiverCore"]
         ),
     ]

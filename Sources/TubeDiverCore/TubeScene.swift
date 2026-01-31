@@ -120,7 +120,9 @@ public final class TubeScene: SKScene {
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
         isUserInteractionEnabled = true
+        #if os(macOS)
         view.window?.makeFirstResponder(view)
+        #endif
 
         cameraNode.position = CGPoint(x: frame.midX, y: frame.midY)
         addChild(cameraNode)
