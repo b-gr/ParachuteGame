@@ -68,7 +68,7 @@ extension TubeScene {
         let score = seconds * multiplier
         scorePanel.isHidden = false
         statusLabel.numberOfLines = 0
-        statusLabel.text = "Game Over\nTime: \(seconds)s  Coins: \(coinsThisRun)  x\(multiplier)\nScore: \(score)\n\nEnter your name and press Return:\n\(nameBuffer.isEmpty ? "_" : nameBuffer)"
+        statusLabel.text = "Game Over\nTime: \(seconds)s  Coins: \(coinsThisRun)  \nScore: \(score)\n\nEnter your name and press Return:\n\(nameBuffer.isEmpty ? "_" : nameBuffer)"
     }
 
     func currentScoreEntry() -> ScoreEntry {

@@ -140,6 +140,19 @@ extension TubeScene {
         banner.lineWidth = 2
         banner.position = CGPoint(x: -170, y: -26)
 
+        let bannerHalfWidth: CGFloat = 95
+        let attachX = banner.position.x + bannerHalfWidth
+        let attachY = banner.position.y + 6
+        let ropePath = CGMutablePath()
+        ropePath.move(to: CGPoint(x: -40, y: -16))
+        ropePath.addQuadCurve(to: CGPoint(x: attachX, y: attachY), control: CGPoint(x: -95, y: -30))
+        ropePath.move(to: CGPoint(x: -52, y: -14))
+        ropePath.addQuadCurve(to: CGPoint(x: attachX, y: attachY - 6), control: CGPoint(x: -105, y: -28))
+        let rope = SKShapeNode(path: ropePath)
+        rope.strokeColor = outline
+        rope.lineWidth = 2
+        rope.lineCap = .round
+
         let text = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
         text.text = "\(seconds) seconds achieved!"
         text.fontSize = 14
@@ -154,6 +167,7 @@ extension TubeScene {
         blimp.addChild(gondola)
         blimp.addChild(tailFin)
         blimp.addChild(tailFinLower)
+        blimp.addChild(rope)
         blimp.addChild(banner)
 
         if !goRight {
